@@ -1,14 +1,8 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
-// Dev server proxies API calls to the FastAPI backend on :8000.
+// API calls go straight to the n8n webhook URLs (VITE_N8N_* env vars),
+// so no dev proxy is needed.
 export default defineConfig({
   plugins: [vue()],
-  server: {
-    proxy: {
-      '/check': 'http://localhost:8000',
-      '/draw': 'http://localhost:8000',
-      '/stock': 'http://localhost:8000',
-    },
-  },
 })
