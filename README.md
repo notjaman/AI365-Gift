@@ -1,105 +1,86 @@
 # AI 365 Lucky Draw Spin Wheel
 
-Saturday-event giveaway. Guest enters name → spins an 8-segment wheel → server picks a prize
-(T-Shirt / Tote Bag / Charger, 30 each) or "Spin Again" → claim logged to Excel via n8n webhook.
+Saturday-event giveaway kiosk. On a single landscape screen the guest types their name, taps
+**SPIN** an 8-segment wheel, and a win dialog shows the prize (T-Shirt / Tote Bag / Charger, 30
+each) or invites a re-spin. Built to run on a **MAXHUB touch panel**.
 
-- **Source of truth = Excel** (behind two n8n webhooks). No local database.
-- **Server decides the prize** (anti-cheat); the wheel only animates to the result.
+- **Frontend-only deploy.** A static Vue 3 app (Netlify) calls **n8n webhooks** directly. No backend, no database.
+- **Source of truth = Excel** (behind n8n). Each claim is one appended row.
+- **n8n decides the prize** (anti-cheat); the wheel only animates to the result.
 - **Flat-equal odds** among in-stock goodies + spin-again (8 segments: 2× each goodie, 2× spin-again).
-- **One claim per name** (case-insensitive, trimmed). Draws serialized so double-clicks can't over-issue.
-- **Mock mode**: with blank webhook URLs the app runs fully on in-memory stock for testing.
+- **One claim per name** (case-insensitive, trimmed). Single kiosk = one user at a time.
 
-## Quick start
+## Architecture
+
+```
+MAXHUB browser ─▶ Netlify (static Vue SPA) ─▶ n8n webhooks ─▶ Excel
+```
+
+- `frontend/` — Vue 3 + Vite single-screen kiosk (`src/views/KioskView.vue`).
+- `netlify.toml` — Netlify build config (base `frontend`, publish `dist`).
+- n8n — three webhooks (`check` / `draw` / `stock`) hold all the logic + Excel I/O.
+
+## Local dev
 
 ```bash
-./run.sh        # builds frontend, preps backend, serves http://localhost:8000
-```
-
-First run auto-installs deps, creates `.env` (blank = MOCK mode), and starts the server.
-For per-step setup or dev hot-reload, see [Setup & run](#setup--run) below.
-
-## Layout
-
-```
-backend/   FastAPI app (routes, draw logic, webhook proxy, serialize-lock, static serve)
-frontend/  Vue 3 + Vite SPA (NameView → WheelView)
-.env.example   N8N_READ_URL / N8N_WRITE_URL
-```
-
-## Setup & run
-
-```bash
-# 1. Build the frontend
 cd frontend
+cp .env.example .env        # fill in your VITE_N8N_* webhook URLs
 npm install
-npm run build            # → frontend/dist
-
-# 2. Backend deps
-cd ../backend
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-
-# 3. Config — copy and fill webhook URLs (or leave blank for MOCK mode)
-cd ..
-cp .env.example .env
-
-# 4. Run (serves the built SPA + API on one port)
-cd backend
-.venv/bin/uvicorn app:app --host 0.0.0.0 --port 8000
-# open http://localhost:8000
+npm run dev                 # Vite dev server
+# build for deploy:
+npm run build               # → frontend/dist
 ```
 
-### Dev mode (hot reload)
+Env vars (`frontend/.env`, baked at build time — only `VITE_`-prefixed vars reach the browser):
 
-```bash
-# terminal 1 — backend
-cd backend && .venv/bin/uvicorn app:app --reload --port 8000
-# terminal 2 — vite dev server (proxies /check /draw /stock to :8000)
-cd frontend && npm run dev
+```
+VITE_N8N_CHECK_URL=https://your-n8n-host/webhook/lucky-draw-check
+VITE_N8N_DRAW_URL=https://your-n8n-host/webhook/lucky-draw-draw
+VITE_N8N_STOCK_URL=https://your-n8n-host/webhook/lucky-draw-stock
 ```
 
-### Logo
+## Deploy (Netlify)
 
-The logo PNG is already exported to `frontend/public/logo.png`. To re-export from the source
-Illustrator file:
+`netlify.toml` already sets `base = "frontend"`, `command = "npm run build"`, `publish = "dist"`.
+Set the three `VITE_N8N_*` env vars in **Site settings → Environment variables**, then deploy.
+Single page, no client routing → no redirect rules needed.
+
+## Run on the MAXHUB
+
+Open the Netlify URL in the panel's browser and go full-screen (landscape). The viewport already
+blocks pinch-zoom; CSS disables long-press selection, pull-to-refresh, and double-tap zoom. The
+on-screen keyboard appears when the name field is focused.
+
+## n8n webhook contract
+
+Each webhook responds **HTTP 200** with a JSON `{ result: ... }` body (the frontend `api.js` maps
+`result` to its UI states). Set each Webhook node's **Allowed Origins (CORS)** to your Netlify domain.
+
+| Webhook | Request | Responses (`result`) |
+|---------|---------|----------------------|
+| `check` | POST `{name}` | `ok` · `empty_name` · `already_claimed` (+ `previous`) |
+| `draw`  | POST `{name}` | `prize` (+ `goodie_id`, `label`) · `spin_again` · `already_claimed` (+ `previous`) · `sold_out` |
+| `stock` | GET | `{ shirt:N, tote:N, charger:N }` |
+
+**Logic the workflows must implement:**
+
+- **Normalize name** for matching: `strip().lower()`.
+- **One claim per name** — `already_claimed` returns the previously won label as `previous`.
+- **Weighted pick** (`draw`): pool = each in-stock goodie ×2 + `spin_again` ×2, then random choice.
+  If no goodie is in stock → `sold_out`.
+- **Derived stock** — don't store a mutable counter. Compute `remaining = total − count(claims for
+  that goodie)`. Initial totals = 30/30/30 (n8n config). The `stock` webhook returns these counts;
+  the wheel greys out sold-out wedges.
+- **Claim row** (on a `prize`) appended to Excel: `{ ts, name, label, goodie_id }`.
+
+> Single-kiosk note: only one person interacts at a time, so no server-side lock is needed. If you
+> ever run multiple panels concurrently, add an n8n mutex before the draw to avoid a double-claim race.
+
+## Logo
+
+The logo PNG lives at `frontend/public/logo.png`. To re-export from the source Illustrator file:
 
 ```bash
 sips -s format png "public/AI 365 T-shirt-Back Design-FA.ai" --out frontend/public/logo.png
 # then rebuild: cd frontend && npm run build
 ```
-
-## n8n webhook contract
-
-Set `N8N_READ_URL` and `N8N_WRITE_URL` in `.env`.
-
-**READ** (GET, or POST `{}`) — returns current stock + claimed names. n8n derives stock from the
-claims log (`stock = 30 − count(claims of that goodie)`):
-
-```json
-{
-  "shirt":   { "label": "T-Shirt",  "stock": 27 },
-  "tote":    { "label": "Tote Bag", "stock": 30 },
-  "charger": { "label": "Charger",  "stock": 25 },
-  "claimed": ["alice", "bob carter"]
-}
-```
-
-`claimed` = lowercased/trimmed names for dedupe. (Bare numbers also accepted: `"shirt": 27`.)
-
-**WRITE** (POST) — n8n appends one Excel row:
-
-```json
-{ "ts": "2026-06-09T14:03:00", "name": "Alice", "label": "T-Shirt", "goodie_id": "shirt" }
-```
-
-Webhook calls retry with exponential backoff; on persistent failure `/draw` returns `503` and
-records nothing (guest re-spins).
-
-## API
-
-| Method | Path     | Body     | Returns                                                                |
-|--------|----------|----------|-----------------------------------------------------------------------|
-| POST   | `/check` | `{name}` | `200 {ok:true}` · `400 empty_name` · `409 already_claimed {previous}`  |
-| POST   | `/draw`  | `{name}` | `200 {type:"prize",goodie_id,label}` / `{type:"spin_again"}` · `409 already_claimed`/`sold_out` · `503` |
-| GET    | `/stock` | —        | `{shirt:N, tote:N, charger:N}`                                         |
-| GET    | `/`      | —        | Vue SPA                                                                |
