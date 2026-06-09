@@ -1,0 +1,267 @@
+<template>
+  <div class="kiosk">
+    <!-- Left: the wheel, fills the half. -->
+    <section class="kiosk-left">
+      <div class="wheel-wrap">
+        <div class="pointer"></div>
+        <canvas
+          ref="canvas"
+          class="wheel-canvas"
+          width="640"
+          height="640"
+          :style="{ transform: `rotate(${rotation}deg)` }"
+        ></canvas>
+        <div class="hub">SPIN</div>
+      </div>
+
+      <div class="stock-bar">
+        <div
+          v-for="g in GOODIES"
+          :key="g.id"
+          class="stock-chip"
+          :class="{ out: (stock[g.id] ?? 1) <= 0 }"
+        >
+          <span class="dot" :style="{ background: g.color }"></span>
+          <span class="stock-label">{{ g.label }}</span>
+          <span class="stock-count">{{ stockText(g.id) }}</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right: name (top 70%) + spin button (bottom 30%). -->
+    <section class="kiosk-right">
+      <div class="name-pane">
+        <img class="logo" src="/logo.png" alt="AI 365" />
+        <h1 class="title">AI 365 Lucky Draw</h1>
+        <p class="subtitle">Enter your name, then spin the wheel 🎡</p>
+        <input
+          v-model="name"
+          class="field"
+          type="text"
+          placeholder="Your name"
+          autocomplete="off"
+          :disabled="spinning || dialogOpen"
+          @keyup.enter="spin"
+        />
+        <p v-if="msg" class="msg" :class="msgClass">{{ msg }}</p>
+      </div>
+
+      <div class="spin-pane">
+        <button
+          class="btn btn-spin"
+          :disabled="spinning || dialogOpen || !name.trim()"
+          @click="spin"
+        >
+          {{ spinning ? 'Spinning…' : 'SPIN' }}
+        </button>
+      </div>
+    </section>
+
+    <!-- Win / outcome dialog. -->
+    <div v-if="dialogOpen" class="dialog-overlay">
+      <div class="dialog confetti-pop">
+        <p class="dialog-text" :class="{ win: dialogWin }">{{ dialogText }}</p>
+        <button class="btn" @click="next">Next →</button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, onMounted } from 'vue'
+import { checkName, drawPrize, getStock } from '../api.js'
+
+// 8 segments: 2x each goodie + 2x spin_again, interleaved for visual balance.
+const SEGMENTS = [
+  { id: 'shirt', label: 'T-Shirt', color: '#3060a8' },
+  { id: 'spin_again', label: 'Spin Again', color: '#9fb0c9' },
+  { id: 'tote', label: 'Tote Bag', color: '#60c0d8' },
+  { id: 'charger', label: 'Charger', color: '#f06018' },
+  { id: 'shirt', label: 'T-Shirt', color: '#3060a8' },
+  { id: 'spin_again', label: 'Spin Again', color: '#9fb0c9' },
+  { id: 'tote', label: 'Tote Bag', color: '#60c0d8' },
+  { id: 'charger', label: 'Charger', color: '#f06018' },
+]
+const SEG = 360 / SEGMENTS.length // 45deg
+
+// The 3 unique goodies (id/label/color), reusing what SEGMENTS already defines.
+const GOODIES = [...new Map(SEGMENTS.filter((s) => s.id !== 'spin_again').map((s) => [s.id, s])).values()].map(
+  ({ id, label, color }) => ({ id, label, color }),
+)
+
+const canvas = ref(null)
+const rotation = ref(0)
+const name = ref('')
+const spinning = ref(false)
+const msg = ref('')
+const msgClass = ref('')
+const stock = ref({})
+const dialogOpen = ref(false)
+const dialogText = ref('')
+const dialogWin = ref(false)
+
+onMounted(async () => {
+  stock.value = await getStock().catch(() => ({}))
+  drawWheel()
+})
+
+function isSoldOut(id) {
+  return id !== 'spin_again' && (stock.value[id] ?? 1) <= 0
+}
+
+// Chip label: pre-fetch placeholder, sold-out, or "N left".
+function stockText(id) {
+  const n = stock.value[id]
+  if (n === undefined || n === null) return '…'
+  return n <= 0 ? 'Sold out' : `${n} left`
+}
+
+function drawWheel() {
+  const c = canvas.value
+  const ctx = c.getContext('2d')
+  const R = c.width / 2
+  ctx.clearRect(0, 0, c.width, c.height)
+  SEGMENTS.forEach((s, i) => {
+    // Segment i centered at i*SEG from top (top = -90deg), clockwise.
+    const center = -90 + i * SEG
+    const start = ((center - SEG / 2) * Math.PI) / 180
+    const end = ((center + SEG / 2) * Math.PI) / 180
+    ctx.beginPath()
+    ctx.moveTo(R, R)
+    ctx.arc(R, R, R - 6, start, end)
+    ctx.closePath()
+    ctx.fillStyle = isSoldOut(s.id) ? '#c8d0dd' : s.color
+    ctx.fill()
+    ctx.strokeStyle = '#ffffff'
+    ctx.lineWidth = 4
+    ctx.stroke()
+
+    // Label — sits on its own wedge, reading outward along the spoke.
+    ctx.save()
+    ctx.translate(R, R)
+    ctx.rotate((center * Math.PI) / 180)
+    ctx.translate(R * 0.62, 0)
+    if (Math.cos((center * Math.PI) / 180) < 0) ctx.rotate(Math.PI)
+    ctx.fillStyle = isSoldOut(s.id) ? '#7c8aa0' : '#ffffff'
+    ctx.font = 'bold 30px Segoe UI, system-ui, sans-serif'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(s.label, 0, 0)
+    ctx.restore()
+  })
+}
+
+// Pick which physical segment index to land on for a given server result.
+function targetIndex(result) {
+  const wantId = result.type === 'prize' ? result.goodie_id : 'spin_again'
+  const matches = SEGMENTS.map((s, i) => (s.id === wantId ? i : -1)).filter((i) => i >= 0)
+  return matches[Math.floor(Math.random() * matches.length)]
+}
+
+function openDialog(text, win = false) {
+  dialogText.value = text
+  dialogWin.value = win
+  dialogOpen.value = true
+  spinning.value = false
+}
+
+function showInline(text, cls = '') {
+  msg.value = text
+  msgClass.value = cls
+  spinning.value = false
+}
+
+async function spin() {
+  if (spinning.value || dialogOpen.value) return
+  const n = name.value.trim()
+  if (!n) {
+    showInline('Please enter your name.', 'error')
+    return
+  }
+  spinning.value = true
+  msg.value = ''
+  msgClass.value = ''
+
+  // 1) Validate the name first — no animation if already claimed.
+  let chk
+  try {
+    chk = await checkName(n)
+  } catch {
+    showInline('Network error — try again.', 'error')
+    return
+  }
+  if (chk.status === 409 && chk.data.error === 'already_claimed') {
+    openDialog(
+      chk.data.previous ? `You already claimed: ${chk.data.previous} ✋` : 'You already claimed a goodie ✋',
+    )
+    return
+  }
+  if (chk.status !== 200) {
+    showInline('Service unavailable — try again.', 'error')
+    return
+  }
+
+  // 2) Draw the prize.
+  let res
+  try {
+    res = await drawPrize(n)
+  } catch {
+    showInline('Network error — try again.', 'error')
+    return
+  }
+  const { status, data } = res
+
+  if (status === 409 && data.error === 'already_claimed') {
+    openDialog(data.previous ? `You already claimed: ${data.previous} ✋` : 'You already claimed a goodie ✋')
+    return
+  }
+  if (status === 409 && data.error === 'sold_out') {
+    openDialog('All goodies claimed — thank you! 🙏')
+    return
+  }
+  if (status !== 200) {
+    showInline('Service unavailable — try again.', 'error')
+    return
+  }
+
+  // Animate the wheel to land on the matching segment.
+  const idx = targetIndex(data)
+  const jitter = (Math.random() - 0.5) * (SEG * 0.5)
+  const base = rotation.value - (rotation.value % 360) // normalize
+  const landing = -(idx * SEG) + jitter
+  rotation.value = base + 360 * 6 + landing
+
+  // Wait for the CSS transition (~4.2s) before revealing the result.
+  setTimeout(() => {
+    if (data.type === 'spin_again') {
+      showInline('Spin again! 🔄', '')
+    } else {
+      openDialog(`You got: ${data.label} 🎉`, true)
+      getStock()
+        .then((s) => {
+          stock.value = s
+          drawWheel()
+        })
+        .catch(() => {})
+    }
+  }, 4300)
+}
+
+// Reset in place for the next person — no navigation.
+function next() {
+  dialogOpen.value = false
+  dialogText.value = ''
+  dialogWin.value = false
+  name.value = ''
+  msg.value = ''
+  msgClass.value = ''
+  spinning.value = false
+  rotation.value = rotation.value % 360
+  getStock()
+    .then((s) => {
+      stock.value = s
+      drawWheel()
+    })
+    .catch(() => {})
+}
+</script>
