@@ -9,6 +9,15 @@ Saturday-event giveaway. Guest enters name → spins an 8-segment wheel → serv
 - **One claim per name** (case-insensitive, trimmed). Draws serialized so double-clicks can't over-issue.
 - **Mock mode**: with blank webhook URLs the app runs fully on in-memory stock for testing.
 
+## Quick start
+
+```bash
+./run.sh        # builds frontend, preps backend, serves http://localhost:8000
+```
+
+First run auto-installs deps, creates `.env` (blank = MOCK mode), and starts the server.
+For per-step setup or dev hot-reload, see [Setup & run](#setup--run) below.
+
 ## Layout
 
 ```
