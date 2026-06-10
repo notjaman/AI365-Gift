@@ -214,62 +214,6 @@ body {
   font-size: 1.4rem;
 }
 
-/* Settings: gear button + interaction-mode panel. */
-.settings-btn {
-  position: fixed;
-  top: 16px;
-  right: 16px;
-  width: 48px;
-  height: 48px;
-  border: none;
-  border-radius: 50%;
-  background: var(--card);
-  box-shadow: 0 6px 16px rgba(10, 20, 50, 0.25);
-  font-size: 1.4rem;
-  cursor: pointer;
-  z-index: 50;
-}
-
-.settings-panel {
-  position: fixed;
-  top: 74px;
-  right: 16px;
-  background: var(--card);
-  border-radius: 16px;
-  box-shadow: var(--shadow);
-  padding: 16px;
-  z-index: 50;
-}
-
-.settings-title {
-  font-size: 0.85rem;
-  font-weight: 700;
-  color: #5a6b8c;
-  margin-bottom: 10px;
-}
-
-.settings-toggle {
-  display: flex;
-  gap: 8px;
-}
-
-.settings-toggle button {
-  padding: 10px 16px;
-  border: 2px solid #d6deec;
-  border-radius: 12px;
-  background: #fff;
-  font-size: 1rem;
-  font-weight: 700;
-  color: var(--ink);
-  cursor: pointer;
-}
-
-.settings-toggle button.active {
-  border-color: var(--blue);
-  background: var(--blue);
-  color: #fff;
-}
-
 /* Win / outcome dialog. */
 .dialog-overlay {
   position: fixed;
@@ -314,17 +258,10 @@ body {
   max-width: 760px;
   max-height: 760px;
   touch-action: none;
-}
-
-.wheel-wrap.mode-cursor {
-  cursor: pointer;
-}
-
-.wheel-wrap.mode-hand {
   cursor: grab;
 }
 
-.wheel-wrap.mode-hand:active {
+.wheel-wrap:active {
   cursor: grabbing;
 }
 

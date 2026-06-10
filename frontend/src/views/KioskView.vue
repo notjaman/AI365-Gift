@@ -1,20 +1,9 @@
 <template>
   <div class="kiosk">
-    <!-- Settings: interaction-mode toggle, top-right corner. -->
-    <button class="settings-btn" aria-label="Settings" @click="settingsOpen = !settingsOpen">⚙</button>
-    <div v-if="settingsOpen" class="settings-panel">
-      <p class="settings-title">Spin by</p>
-      <div class="settings-toggle">
-        <button :class="{ active: mode === 'cursor' }" @click="setMode('cursor')">🖱 Cursor</button>
-        <button :class="{ active: mode === 'hand' }" @click="setMode('hand')">✋ Hand</button>
-      </div>
-    </div>
-
-    <!-- Left: the wheel only, ~60% width. Click/flick to spin. -->
+    <!-- Left: the wheel only, ~60% width. Click or drag-flick to spin. -->
     <section class="kiosk-left">
       <div
         class="wheel-wrap"
-        :class="`mode-${mode}`"
         @click="onWheelClick"
         @pointerdown="onPointerDown"
         @pointerup="onPointerUp"
@@ -27,7 +16,7 @@
           height="640"
           :style="{ transform: `rotate(${rotation}deg)` }"
         ></canvas>
-        <div class="hub">{{ mode === 'hand' ? 'FLICK' : 'TAP' }}</div>
+        <div class="hub">SPIN</div>
       </div>
     </section>
 
@@ -111,16 +100,9 @@ const dialogOpen = ref(false)
 const dialogText = ref('')
 const dialogWin = ref(false)
 
-// Interaction mode: 'cursor' (click to spin) or 'hand' (drag-flick to spin).
-const mode = ref(localStorage.getItem('spinMode') || 'cursor')
-const settingsOpen = ref(false)
-const downPt = ref(null) // pointer start, for flick detection in hand mode
-
-function setMode(m) {
-  mode.value = m
-  localStorage.setItem('spinMode', m)
-  settingsOpen.value = false
-}
+// Both interactions are always on: a click spins, and so does a drag-flick.
+const downPt = ref(null) // pointer start, for flick detection
+const dragged = ref(false) // true when the last pointer gesture was a flick
 
 onMounted(() => {
   stock.value = Object.fromEntries(GOODIES.map((g) => [g.id, SEED]))
@@ -138,23 +120,29 @@ function legendText(id) {
   return n <= 0 ? 'Sold out' : `${n} / ${SEED}`
 }
 
-// Cursor mode: a plain click on the wheel spins.
+// A plain click on the wheel spins (unless the gesture was already a flick).
 function onWheelClick() {
-  if (mode.value === 'cursor') spin()
+  if (dragged.value) {
+    dragged.value = false
+    return
+  }
+  spin()
 }
 
-// Hand mode: spin when a pointer drag travels past a small threshold (a flick).
+// A drag-flick past a small threshold also spins.
 function onPointerDown(e) {
-  if (mode.value !== 'hand') return
   downPt.value = { x: e.clientX, y: e.clientY }
 }
 
 function onPointerUp(e) {
-  if (mode.value !== 'hand' || !downPt.value) return
+  if (!downPt.value) return
   const dx = e.clientX - downPt.value.x
   const dy = e.clientY - downPt.value.y
   downPt.value = null
-  if (Math.hypot(dx, dy) > 24) spin()
+  if (Math.hypot(dx, dy) > 24) {
+    dragged.value = true // suppress the click that follows this flick
+    spin()
+  }
 }
 
 function drawWheel() {
