@@ -4,45 +4,52 @@ Saturday-event giveaway kiosk. On a single landscape screen the guest types thei
 **SPIN** an 8-segment wheel, and a win dialog shows the prize (T-Shirt / Tote Bag / Charger, 30
 each) or invites a re-spin. Built to run on a **MAXHUB touch panel**.
 
-- **Frontend-only deploy.** A static Vue 3 app (Netlify) calls **n8n webhooks** directly. No backend, no database.
-- **Source of truth = Excel** (behind n8n). Each claim is one appended row.
-- **n8n decides the prize** (anti-cheat); the wheel only animates to the result.
+- **Frontend-only deploy.** A static Vue 3 app (Netlify) calls **one n8n webhook** directly. No backend, no database.
+- **Source of truth = Google Sheet** (behind n8n). Each win is one appended row.
+- **Frontend picks the prize**; the wheel animates to it and records the win.
 - **Flat-equal odds** among in-stock goodies + spin-again (8 segments: 2× each goodie, 2× spin-again).
-- **One claim per name** (case-insensitive, trimmed). Single kiosk = one user at a time.
+- **No name check.** Single kiosk = one user at a time.
 
 ## Architecture
 
 ```
-MAXHUB browser ─▶ Netlify (static Vue SPA) ─▶ n8n webhooks ─▶ Excel
+MAXHUB browser ─▶ Netlify (static Vue SPA) ─▶ n8n write webhook ─▶ Google Sheet
 ```
 
 - `frontend/` — Vue 3 + Vite single-screen kiosk (`src/views/KioskView.vue`).
 - `netlify.toml` — Netlify build config (base `frontend`, publish `dist`).
-- n8n — three webhooks (`check` / `draw` / `stock`) hold all the logic + Excel I/O.
+- `n8n/update-guest-list.workflow.json` — the single webhook: appends the guest + decrements stock.
+
+## How it works
+
+- Stock is seeded **30 per goodie locally** in the frontend (matches the Gifts sheet seed).
+- The wheel picks the outcome client-side. A sold-out goodie (local count 0) falls back to Spin Again.
+- On a win the frontend decrements its local count, then POSTs `{ name, goodie_id, label }` to the
+  webhook. The webhook appends the guest row, decrements the sheet, and returns `remaining`, which the
+  frontend uses to sync that goodie's chip count.
+- Blank webhook URL → **mock mode**: spins work, stock decrements locally, no network call.
 
 ## Local dev
 
 ```bash
 cd frontend
-cp .env.example .env        # fill in your VITE_N8N_* webhook URLs
+cp .env.example .env        # fill in VITE_N8N_WRITE_URL (or leave blank for mock mode)
 npm install
 npm run dev                 # Vite dev server
 # build for deploy:
 npm run build               # → frontend/dist
 ```
 
-Env vars (`frontend/.env`, baked at build time — only `VITE_`-prefixed vars reach the browser):
+Env var (`frontend/.env`, baked at build time — only `VITE_`-prefixed vars reach the browser):
 
 ```
-VITE_N8N_CHECK_URL=https://your-n8n-host/webhook/lucky-draw-check
-VITE_N8N_DRAW_URL=https://your-n8n-host/webhook/lucky-draw-draw
-VITE_N8N_STOCK_URL=https://your-n8n-host/webhook/lucky-draw-stock
+VITE_N8N_WRITE_URL=https://your-n8n-host/webhook/<id>
 ```
 
 ## Deploy (Netlify)
 
 `netlify.toml` already sets `base = "frontend"`, `command = "npm run build"`, `publish = "dist"`.
-Set the three `VITE_N8N_*` env vars in **Site settings → Environment variables**, then deploy.
+Set `VITE_N8N_WRITE_URL` in **Site settings → Environment variables**, then deploy.
 Single page, no client routing → no redirect rules needed.
 
 ## Run on the MAXHUB
@@ -53,28 +60,35 @@ on-screen keyboard appears when the name field is focused.
 
 ## n8n webhook contract
 
-Each webhook responds **HTTP 200** with a JSON `{ result: ... }` body (the frontend `api.js` maps
-`result` to its UI states). Set each Webhook node's **Allowed Origins (CORS)** to your Netlify domain.
+One **POST** webhook. Responds **HTTP 200** with JSON. Set the Webhook node's **Allowed Origins
+(CORS)** to your Netlify domain (or `*` while testing). Full detail in `docs/n8n-webhooks.md`.
 
-| Webhook | Request | Responses (`result`) |
-|---------|---------|----------------------|
-| `check` | POST `{name}` | `ok` · `empty_name` · `already_claimed` (+ `previous`) |
-| `draw`  | POST `{name}` | `prize` (+ `goodie_id`, `label`) · `spin_again` · `already_claimed` (+ `previous`) · `sold_out` |
-| `stock` | GET | `{ shirt:N, tote:N, charger:N }` |
+| Webhook | Request | Response |
+|---------|---------|----------|
+| update guest list | POST `{ name, goodie_id, label }` | `{ result:"ok", goodie_id, remaining }` |
 
-**Logic the workflows must implement:**
+**Workflow logic** (`n8n/update-guest-list.workflow.json`):
 
-- **Normalize name** for matching: `strip().lower()`.
-- **One claim per name** — `already_claimed` returns the previously won label as `previous`.
-- **Weighted pick** (`draw`): pool = each in-stock goodie ×2 + `spin_again` ×2, then random choice.
-  If no goodie is in stock → `sold_out`.
-- **Derived stock** — don't store a mutable counter. Compute `remaining = total − count(claims for
-  that goodie)`. Initial totals = 30/30/30 (n8n config). The `stock` webhook returns these counts;
-  the wheel greys out sold-out wedges.
-- **Claim row** (on a `prize`) appended to Excel: `{ ts, name, label, goodie_id }`.
+- Append `{ name, goodie_id, label, timestamp }` to the **Guests** sheet.
+- Decrement that goodie's `remaining` by 1 in the **Gifts** sheet; return the new `remaining`.
+- Called only on a real win — Spin Again sends nothing.
 
-> Single-kiosk note: only one person interacts at a time, so no server-side lock is needed. If you
-> ever run multiple panels concurrently, add an n8n mutex before the draw to avoid a double-claim race.
+**Google Sheet** (one spreadsheet, two tabs):
+
+- **Guests** — columns `name`, `goodie_id`, `label`, `timestamp`
+- **Gifts** — seed 30 each:
+
+  | goodie_id | label    | remaining |
+  |-----------|----------|-----------|
+  | shirt     | T-Shirt  | 30        |
+  | tote      | Tote Bag | 30        |
+  | charger   | Charger  | 30        |
+
+After importing the workflow, set `YOUR_GOOGLE_SHEET_ID` and the Google Sheets credential on each
+Sheets node, then activate it.
+
+> Single-kiosk note: only one person interacts at a time, so no server-side lock is needed. Local
+> stock and the sheet can drift if multiple panels run concurrently — add a read-back or mutex first.
 
 ## Logo
 

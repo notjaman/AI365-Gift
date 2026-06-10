@@ -69,7 +69,10 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { checkName, drawPrize, getStock } from '../api.js'
+import { recordWin } from '../api.js'
+
+// Stock is tracked locally, seeded per goodie; synced from each win's response.
+const SEED = 30
 
 // 8 segments: 2x each goodie + 2x spin_again, interleaved for visual balance.
 const SEGMENTS = [
@@ -100,8 +103,8 @@ const dialogOpen = ref(false)
 const dialogText = ref('')
 const dialogWin = ref(false)
 
-onMounted(async () => {
-  stock.value = await getStock().catch(() => ({}))
+onMounted(() => {
+  stock.value = Object.fromEntries(GOODIES.map((g) => [g.id, SEED]))
   drawWheel()
 })
 
@@ -171,6 +174,14 @@ function showInline(text, cls = '') {
   spinning.value = false
 }
 
+// Decide the outcome client-side, weighted by the physical wheel (2 of each
+// goodie + 2 spin_again). Landing on a sold-out goodie falls back to spin_again.
+function pickOutcome() {
+  const seg = SEGMENTS[Math.floor(Math.random() * SEGMENTS.length)]
+  if (seg.id === 'spin_again' || isSoldOut(seg.id)) return { type: 'spin_again' }
+  return { type: 'prize', goodie_id: seg.id, label: seg.label }
+}
+
 async function spin() {
   if (spinning.value || dialogOpen.value) return
   const n = name.value.trim()
@@ -178,54 +189,21 @@ async function spin() {
     showInline('Please enter your name.', 'error')
     return
   }
+
+  // Nothing left to give.
+  if (GOODIES.every((g) => isSoldOut(g.id))) {
+    openDialog('All goodies claimed — thank you! 🙏')
+    return
+  }
+
   spinning.value = true
   msg.value = ''
   msgClass.value = ''
 
-  // 1) Validate the name first — no animation if already claimed.
-  let chk
-  try {
-    chk = await checkName(n)
-  } catch {
-    showInline('Network error — try again.', 'error')
-    return
-  }
-  if (chk.status === 409 && chk.data.error === 'already_claimed') {
-    openDialog(
-      chk.data.previous ? `You already claimed: ${chk.data.previous} ✋` : 'You already claimed a goodie ✋',
-    )
-    return
-  }
-  if (chk.status !== 200) {
-    showInline('Service unavailable — try again.', 'error')
-    return
-  }
-
-  // 2) Draw the prize.
-  let res
-  try {
-    res = await drawPrize(n)
-  } catch {
-    showInline('Network error — try again.', 'error')
-    return
-  }
-  const { status, data } = res
-
-  if (status === 409 && data.error === 'already_claimed') {
-    openDialog(data.previous ? `You already claimed: ${data.previous} ✋` : 'You already claimed a goodie ✋')
-    return
-  }
-  if (status === 409 && data.error === 'sold_out') {
-    openDialog('All goodies claimed — thank you! 🙏')
-    return
-  }
-  if (status !== 200) {
-    showInline('Service unavailable — try again.', 'error')
-    return
-  }
+  const outcome = pickOutcome()
 
   // Animate the wheel to land on the matching segment.
-  const idx = targetIndex(data)
+  const idx = targetIndex(outcome)
   const jitter = (Math.random() - 0.5) * (SEG * 0.5)
   const base = rotation.value - (rotation.value % 360) // normalize
   const landing = -(idx * SEG) + jitter
@@ -233,17 +211,23 @@ async function spin() {
 
   // Wait for the CSS transition (~4.2s) before revealing the result.
   setTimeout(() => {
-    if (data.type === 'spin_again') {
+    if (outcome.type === 'spin_again') {
       showInline('Spin again! 🔄', '')
-    } else {
-      openDialog(`You got: ${data.label} 🎉`, true)
-      getStock()
-        .then((s) => {
-          stock.value = s
-          drawWheel()
-        })
-        .catch(() => {})
+      return
     }
+    // Win: decrement locally now, then record + sync from the server's count.
+    const id = outcome.goodie_id
+    stock.value = { ...stock.value, [id]: Math.max(0, (stock.value[id] ?? SEED) - 1) }
+    drawWheel()
+    openDialog(`You got: ${outcome.label} 🎉`, true)
+    recordWin(n, id, outcome.label)
+      .then((r) => {
+        if (typeof r.remaining === 'number') {
+          stock.value = { ...stock.value, [id]: r.remaining }
+          drawWheel()
+        }
+      })
+      .catch(() => {})
   }, 4300)
 }
 
@@ -257,11 +241,5 @@ function next() {
   msgClass.value = ''
   spinning.value = false
   rotation.value = rotation.value % 360
-  getStock()
-    .then((s) => {
-      stock.value = s
-      drawWheel()
-    })
-    .catch(() => {})
 }
 </script>
