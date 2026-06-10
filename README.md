@@ -90,11 +90,7 @@ Sheets node, then activate it.
 > Single-kiosk note: only one person interacts at a time, so no server-side lock is needed. Local
 > stock and the sheet can drift if multiple panels run concurrently — add a read-back or mutex first.
 
-## Logo
+## Brand art
 
-The logo PNG lives at `frontend/public/logo.png`. To re-export from the source Illustrator file:
-
-```bash
-sips -s format png "public/AI 365 T-shirt-Back Design-FA.ai" --out frontend/public/logo.png
-# then rebuild: cd frontend && npm run build
-```
+The logo and mascot PNGs live at `frontend/public/ai365-logo.png` (brand title) and
+`frontend/public/mascot.png` (wheel hub + win dialog + favicon).
