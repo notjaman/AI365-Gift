@@ -139,65 +139,69 @@ body {
 }
 
 .kiosk-left {
-  flex: 1;
+  flex: 0 0 60%;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2.4vh;
   padding: 2vh 2vw;
 }
 
-/* Per-goodie stock counts under the wheel. */
-.stock-bar {
+.kiosk-right {
+  flex: 0 0 40%;
   display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  justify-content: center;
+  flex-direction: column;
+  padding: 3vh 3vw;
+  gap: 3vh;
 }
 
-.stock-chip {
+/* Stock legend: goodie name left, "N / total" right. */
+.legend {
+  background: var(--card);
+  border-radius: 18px;
+  box-shadow: 0 6px 16px rgba(10, 20, 50, 0.18);
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.legend-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  background: var(--card);
-  border-radius: 999px;
-  box-shadow: 0 6px 16px rgba(10, 20, 50, 0.18);
-  font-size: 1.05rem;
+  justify-content: space-between;
+  font-size: 1.1rem;
   font-weight: 700;
   color: var(--ink);
 }
 
-.stock-chip .dot {
+.legend-name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.legend-name .dot {
   width: 14px;
   height: 14px;
   border-radius: 50%;
   flex: none;
 }
 
-.stock-chip .stock-count {
+.legend-count {
   font-weight: 800;
   color: var(--blue);
 }
 
-.stock-chip.out {
+.legend-row.out {
   opacity: 0.5;
 }
 
-.stock-chip.out .stock-count {
+.legend-row.out .legend-count {
   color: var(--orange-deep);
 }
 
-.kiosk-right {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  padding: 2vh 4vw;
-}
-
 .name-pane {
-  flex: 7;
+  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -210,19 +214,60 @@ body {
   font-size: 1.4rem;
 }
 
-.spin-pane {
-  flex: 3;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+/* Settings: gear button + interaction-mode panel. */
+.settings-btn {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  width: 48px;
+  height: 48px;
+  border: none;
+  border-radius: 50%;
+  background: var(--card);
+  box-shadow: 0 6px 16px rgba(10, 20, 50, 0.25);
+  font-size: 1.4rem;
+  cursor: pointer;
+  z-index: 50;
 }
 
-.btn-spin {
-  width: 100%;
-  max-width: 520px;
-  height: min(20vh, 130px);
-  font-size: 2rem;
-  margin-top: 0;
+.settings-panel {
+  position: fixed;
+  top: 74px;
+  right: 16px;
+  background: var(--card);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  padding: 16px;
+  z-index: 50;
+}
+
+.settings-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #5a6b8c;
+  margin-bottom: 10px;
+}
+
+.settings-toggle {
+  display: flex;
+  gap: 8px;
+}
+
+.settings-toggle button {
+  padding: 10px 16px;
+  border: 2px solid #d6deec;
+  border-radius: 12px;
+  background: #fff;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.settings-toggle button.active {
+  border-color: var(--blue);
+  background: var(--blue);
+  color: #fff;
 }
 
 /* Win / outcome dialog. */
@@ -264,10 +309,23 @@ body {
 /* Wheel */
 .wheel-wrap {
   position: relative;
-  width: min(44vw, 76vh);
-  height: min(44vw, 76vh);
-  max-width: 680px;
-  max-height: 680px;
+  width: min(54vw, 82vh);
+  height: min(54vw, 82vh);
+  max-width: 760px;
+  max-height: 760px;
+  touch-action: none;
+}
+
+.wheel-wrap.mode-cursor {
+  cursor: pointer;
+}
+
+.wheel-wrap.mode-hand {
+  cursor: grab;
+}
+
+.wheel-wrap.mode-hand:active {
+  cursor: grabbing;
 }
 
 .wheel-canvas {
@@ -327,13 +385,8 @@ body {
     width: min(80vw, 56vh);
     height: min(80vw, 56vh);
   }
-  .stock-chip {
+  .legend-row {
     font-size: 0.95rem;
-    padding: 6px 12px;
-  }
-  .btn-spin {
-    height: 84px;
-    font-size: 1.5rem;
   }
 }
 

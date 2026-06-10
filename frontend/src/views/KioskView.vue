@@ -1,8 +1,24 @@
 <template>
   <div class="kiosk">
-    <!-- Left: the wheel, fills the half. -->
+    <!-- Settings: interaction-mode toggle, top-right corner. -->
+    <button class="settings-btn" aria-label="Settings" @click="settingsOpen = !settingsOpen">⚙</button>
+    <div v-if="settingsOpen" class="settings-panel">
+      <p class="settings-title">Spin by</p>
+      <div class="settings-toggle">
+        <button :class="{ active: mode === 'cursor' }" @click="setMode('cursor')">🖱 Cursor</button>
+        <button :class="{ active: mode === 'hand' }" @click="setMode('hand')">✋ Hand</button>
+      </div>
+    </div>
+
+    <!-- Left: the wheel only, ~60% width. Click/flick to spin. -->
     <section class="kiosk-left">
-      <div class="wheel-wrap">
+      <div
+        class="wheel-wrap"
+        :class="`mode-${mode}`"
+        @click="onWheelClick"
+        @pointerdown="onPointerDown"
+        @pointerup="onPointerUp"
+      >
         <div class="pointer"></div>
         <canvas
           ref="canvas"
@@ -11,25 +27,27 @@
           height="640"
           :style="{ transform: `rotate(${rotation}deg)` }"
         ></canvas>
-        <div class="hub">SPIN</div>
-      </div>
-
-      <div class="stock-bar">
-        <div
-          v-for="g in GOODIES"
-          :key="g.id"
-          class="stock-chip"
-          :class="{ out: (stock[g.id] ?? 1) <= 0 }"
-        >
-          <span class="dot" :style="{ background: g.color }"></span>
-          <span class="stock-label">{{ g.label }}</span>
-          <span class="stock-count">{{ stockText(g.id) }}</span>
-        </div>
+        <div class="hub">{{ mode === 'hand' ? 'FLICK' : 'TAP' }}</div>
       </div>
     </section>
 
-    <!-- Right: name (top 70%) + spin button (bottom 30%). -->
+    <!-- Right: stock legend (top) + name (below). -->
     <section class="kiosk-right">
+      <div class="legend">
+        <div
+          v-for="g in GOODIES"
+          :key="g.id"
+          class="legend-row"
+          :class="{ out: (stock[g.id] ?? 1) <= 0 }"
+        >
+          <span class="legend-name">
+            <span class="dot" :style="{ background: g.color }"></span>
+            {{ g.label }}
+          </span>
+          <span class="legend-count">{{ legendText(g.id) }}</span>
+        </div>
+      </div>
+
       <div class="name-pane">
         <img class="logo" src="/logo.png" alt="AI 365" />
         <h1 class="title">AI 365 Lucky Draw</h1>
@@ -44,16 +62,6 @@
           @keyup.enter="spin"
         />
         <p v-if="msg" class="msg" :class="msgClass">{{ msg }}</p>
-      </div>
-
-      <div class="spin-pane">
-        <button
-          class="btn btn-spin"
-          :disabled="spinning || dialogOpen || !name.trim()"
-          @click="spin"
-        >
-          {{ spinning ? 'Spinning…' : 'SPIN' }}
-        </button>
       </div>
     </section>
 
@@ -103,6 +111,17 @@ const dialogOpen = ref(false)
 const dialogText = ref('')
 const dialogWin = ref(false)
 
+// Interaction mode: 'cursor' (click to spin) or 'hand' (drag-flick to spin).
+const mode = ref(localStorage.getItem('spinMode') || 'cursor')
+const settingsOpen = ref(false)
+const downPt = ref(null) // pointer start, for flick detection in hand mode
+
+function setMode(m) {
+  mode.value = m
+  localStorage.setItem('spinMode', m)
+  settingsOpen.value = false
+}
+
 onMounted(() => {
   stock.value = Object.fromEntries(GOODIES.map((g) => [g.id, SEED]))
   drawWheel()
@@ -112,11 +131,30 @@ function isSoldOut(id) {
   return id !== 'spin_again' && (stock.value[id] ?? 1) <= 0
 }
 
-// Chip label: pre-fetch placeholder, sold-out, or "N left".
-function stockText(id) {
+// Legend count: "N / total" remaining, or sold-out / placeholder.
+function legendText(id) {
   const n = stock.value[id]
-  if (n === undefined || n === null) return '…'
-  return n <= 0 ? 'Sold out' : `${n} left`
+  if (n === undefined || n === null) return `… / ${SEED}`
+  return n <= 0 ? 'Sold out' : `${n} / ${SEED}`
+}
+
+// Cursor mode: a plain click on the wheel spins.
+function onWheelClick() {
+  if (mode.value === 'cursor') spin()
+}
+
+// Hand mode: spin when a pointer drag travels past a small threshold (a flick).
+function onPointerDown(e) {
+  if (mode.value !== 'hand') return
+  downPt.value = { x: e.clientX, y: e.clientY }
+}
+
+function onPointerUp(e) {
+  if (mode.value !== 'hand' || !downPt.value) return
+  const dx = e.clientX - downPt.value.x
+  const dy = e.clientY - downPt.value.y
+  downPt.value = null
+  if (Math.hypot(dx, dy) > 24) spin()
 }
 
 function drawWheel() {
