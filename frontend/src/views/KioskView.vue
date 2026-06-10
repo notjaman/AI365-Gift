@@ -166,7 +166,7 @@
 
 <script setup>
 import { ref, computed, onMounted, h } from 'vue'
-import { recordWin } from '../api.js'
+import { recordWin, fetchStock } from '../api.js'
 
 // Stock is tracked locally, seeded per goodie; synced from each win's response.
 const SEED = 30
@@ -272,8 +272,11 @@ const confetti = computed(() =>
   })),
 )
 
-onMounted(() => {
+onMounted(async () => {
+  // Seed for instant render; n8n's Stock sheet is the source of truth.
   stock.value = Object.fromEntries(GOODIES.map((g) => [g.id, SEED]))
+  const live = await fetchStock()
+  if (Object.keys(live).length) stock.value = { ...stock.value, ...live }
 })
 
 function isSoldOut(id) {
