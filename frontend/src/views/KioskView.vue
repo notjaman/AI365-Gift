@@ -92,12 +92,12 @@
             <span class="legend-bar">
               <span
                 class="legend-fill"
-                :style="{ width: Math.max(0, ((stock[g.id] ?? 0) / SEED) * 100) + '%', background: g.color }"
+                :style="{ width: Math.max(0, ((stock[g.id] ?? 0) / (capacity[g.id] || 1)) * 100) + '%', background: g.color }"
               ></span>
             </span>
             <span class="legend-count">
               <template v-if="(stock[g.id] ?? 1) <= 0">Sold out</template>
-              <template v-else>{{ stock[g.id] }}<i>/{{ SEED }}</i></template>
+              <template v-else>{{ stock[g.id] }}<i>/{{ capacity[g.id] ?? 0 }}</i></template>
             </span>
           </div>
         </div>
@@ -168,8 +168,7 @@
 import { ref, computed, onMounted, h } from 'vue'
 import { recordWin, fetchStock } from '../api.js'
 
-// Stock is tracked locally, seeded per goodie; synced from each win's response.
-const SEED = 30
+// Stock comes from n8n (Google Sheets is the source of truth); synced per win.
 const SPIN_MS = 4200
 
 // 3 real goodies (brand colors + icon) + the "spin again" filler.
@@ -248,6 +247,7 @@ const spinning = ref(false)
 const msg = ref('')
 const msgType = ref('')
 const stock = ref({})
+const capacity = ref({}) // first counts seen from n8n — the legend bar's 100% mark
 const dialogOpen = ref(false)
 const dialogText = ref('')
 const dialogWin = ref(false)
@@ -273,10 +273,10 @@ const confetti = computed(() =>
 )
 
 onMounted(async () => {
-  // Seed for instant render; n8n's Stock sheet is the source of truth.
-  stock.value = Object.fromEntries(GOODIES.map((g) => [g.id, SEED]))
+  // n8n's Stock sheet is the source of truth; capacity = first counts seen.
   const live = await fetchStock()
-  if (Object.keys(live).length) stock.value = { ...stock.value, ...live }
+  stock.value = { ...live }
+  capacity.value = { ...live }
 })
 
 function isSoldOut(id) {
@@ -393,7 +393,7 @@ function spin() {
     }
     // Win: decrement locally now, then record + sync from the server's count.
     const id = outcome.id
-    stock.value = { ...stock.value, [id]: Math.max(0, (stock.value[id] ?? SEED) - 1) }
+    stock.value = { ...stock.value, [id]: Math.max(0, (stock.value[id] ?? 0) - 1) }
     celebrate.value = true
     openDialog('', true, GOODIE_BY_ID[id])
     recordWin(n, id, GOODIE_BY_ID[id].label)

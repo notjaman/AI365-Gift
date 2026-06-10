@@ -18,16 +18,18 @@ MAXHUB browser ─▶ Netlify (static Vue SPA) ─▶ n8n write webhook ─▶ G
 
 - `frontend/` — Vue 3 + Vite single-screen kiosk (`src/views/KioskView.vue`).
 - `netlify.toml` — Netlify build config (base `frontend`, publish `dist`).
-- `n8n/update-guest-list.workflow.json` — the single webhook: appends the guest + decrements stock.
+- `docs/n8n-workflow.json` — the single webhook workflow (read stock + record win).
 
 ## How it works
 
-- Stock is seeded **30 per goodie locally** in the frontend (matches the Gifts sheet seed).
-- The wheel picks the outcome client-side. A sold-out goodie (local count 0) falls back to Spin Again.
-- On a win the frontend decrements its local count, then POSTs `{ name, goodie_id, label }` to the
-  webhook. The webhook appends the guest row, decrements the sheet, and returns `remaining`, which the
-  frontend uses to sync that goodie's chip count.
-- Blank webhook URL → **mock mode**: spins work, stock decrements locally, no network call.
+- **Stock lives in the Google Sheet `Stock` tab** (via n8n) — there is no hardcoded stock in
+  the frontend. On load the app POSTs `{ action: "stock" }` and renders the live counts; the
+  first count seen per goodie is the legend bar's 100% mark.
+- The wheel picks the outcome client-side. A sold-out goodie (count 0) falls back to Spin Again.
+- On a win the frontend optimistically decrements its chip, then POSTs `{ name, goodie_id, label }`.
+  n8n checks stock, appends the guest row, decrements the sheet, and returns `remaining`, which the
+  frontend uses to sync that goodie's count. If stock is 0, n8n responds `sold_out` and writes nothing.
+- Blank webhook URL → **mock mode**: no network, legend shows no counts, spins still work.
 
 ## Local dev
 
@@ -60,35 +62,39 @@ on-screen keyboard appears when the name field is focused.
 
 ## n8n webhook contract
 
-One **POST** webhook. Responds **HTTP 200** with JSON. Set the Webhook node's **Allowed Origins
-(CORS)** to your Netlify domain (or `*` while testing). Full detail in `docs/n8n-webhooks.md`.
+One **POST** webhook, two behaviors (branched on whether the body has a `goodie_id`). Responds
+**HTTP 200** with JSON. Set the Webhook node's **Allowed Origins (CORS)** to your Netlify domain
+(or `*` while testing).
 
-| Webhook | Request | Response |
-|---------|---------|----------|
-| update guest list | POST `{ name, goodie_id, label }` | `{ result:"ok", goodie_id, remaining }` |
+| Call | Request | Response |
+|------|---------|----------|
+| read stock (on load) | POST `{ action: "stock" }` | `{ stock: { shirt, tote, charger } }` |
+| record win | POST `{ name, goodie_id, label }` | `{ result:"ok", goodie_id, remaining }` |
+| record win (sold out) | POST `{ name, goodie_id, label }` | `{ result:"sold_out", goodie_id, remaining:0 }` |
 
-**Workflow logic** (`n8n/update-guest-list.workflow.json`):
+**Workflow logic** (`docs/n8n-workflow.json`):
 
-- Append `{ name, goodie_id, label, timestamp }` to the **Guests** sheet.
-- Decrement that goodie's `remaining` by 1 in the **Gifts** sheet; return the new `remaining`.
+- No `goodie_id` → read the **Stock** tab and return `{ stock: {...} }`.
+- Has `goodie_id` → read stock; if in stock, append the guest to **Guest list** and decrement
+  the **Stock** tab, returning the new `remaining`; if 0, return `sold_out` and write nothing.
 - Called only on a real win — Spin Again sends nothing.
 
 **Google Sheet** (one spreadsheet, two tabs):
 
-- **Guests** — columns `name`, `goodie_id`, `label`, `timestamp`
-- **Gifts** — seed 30 each:
+- **Guest list** (`gid=0`) — columns `Name `, `Gift`
+- **Stock** — seed 30 each:
 
-  | goodie_id | label    | remaining |
-  |-----------|----------|-----------|
-  | shirt     | T-Shirt  | 30        |
-  | tote      | Tote Bag | 30        |
-  | charger   | Charger  | 30        |
+  | goodie_id | label    | stock |
+  |-----------|----------|-------|
+  | shirt     | T-Shirt  | 30    |
+  | tote      | Tote Bag | 30    |
+  | charger   | Charger  | 30    |
 
-After importing the workflow, set `YOUR_GOOGLE_SHEET_ID` and the Google Sheets credential on each
-Sheets node, then activate it.
+After importing the workflow, re-select the `Stock` sheet on each Sheets node (Read Stock,
+Read Stock 2, Update Stock) and confirm the Google Sheets credential, then activate it.
 
-> Single-kiosk note: only one person interacts at a time, so no server-side lock is needed. Local
-> stock and the sheet can drift if multiple panels run concurrently — add a read-back or mutex first.
+> Single-kiosk note: only one person interacts at a time, so no server-side lock is needed. Under
+> concurrent panels the read-modify-write on stock can race — add a mutex first.
 
 ## Brand art
 
