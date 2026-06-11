@@ -101,6 +101,7 @@
             </span>
           </div>
         </div>
+        <button class="restock-btn" @click="resetStock">Restock</button>
       </div>
 
       <div class="entry">
@@ -430,6 +431,13 @@ function spin() {
     openDialog('', true, GOODIE_BY_ID[id])
     recordWin(n, id, GOODIE_BY_ID[id].label).catch(() => {})
   }, SPIN_MS + 120)
+}
+
+// Reset stock to seed values. Called by the restock button.
+function resetStock() {
+  stock.value = { ...STOCK_SEED }
+  capacity.value = { ...STOCK_SEED }
+  saveStock(stock.value)
 }
 
 // Reset in place for the next person — no navigation.
