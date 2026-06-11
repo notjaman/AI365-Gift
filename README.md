@@ -5,9 +5,9 @@ Saturday-event giveaway kiosk. On a single landscape screen the guest types thei
 each) or invites a re-spin. Built to run on a **MAXHUB touch panel**.
 
 - **Frontend-only deploy.** A static Vue 3 app (Netlify) calls **one n8n webhook** directly. No backend, no database.
-- **Source of truth = Google Sheet** (behind n8n). Each win is one appended row.
+- **Stock lives in the frontend** (seeded in code, persisted to `localStorage`). The n8n webhook only appends the winner to the Google Sheet guest list.
 - **Frontend picks the prize**; the wheel animates to it and records the win.
-- **Flat-equal odds** among in-stock goodies + spin-again (8 segments: 2× each goodie, 2× spin-again).
+- **Odds:** Spin Again is a flat 10%; the other 90% splits across the in-stock goodies weighted by each one's remaining stock, so a goodie with more units left wins more often and the pool drains evenly.
 - **No name check.** Single kiosk = one user at a time.
 
 ## Architecture
@@ -18,18 +18,19 @@ MAXHUB browser ─▶ Netlify (static Vue SPA) ─▶ n8n write webhook ─▶ G
 
 - `frontend/` — Vue 3 + Vite single-screen kiosk (`src/views/KioskView.vue`).
 - `netlify.toml` — Netlify build config (base `frontend`, publish `dist`).
-- `docs/n8n-workflow.json` — the single webhook workflow (read stock + record win).
+- `docs/n8n-workflow.json` — the single webhook workflow (append winner to guest list).
 
 ## How it works
 
-- **Stock lives in the Google Sheet `Stock` tab** (via n8n) — there is no hardcoded stock in
-  the frontend. On load the app POSTs `{ action: "stock" }` and renders the live counts; the
-  first count seen per goodie is the legend bar's 100% mark.
-- The wheel picks the outcome client-side. A sold-out goodie (count 0) falls back to Spin Again.
-- On a win the frontend optimistically decrements its chip, then POSTs `{ name, goodie_id, label }`.
-  n8n checks stock, appends the guest row, decrements the sheet, and returns `remaining`, which the
-  frontend uses to sync that goodie's count. If stock is 0, n8n responds `sold_out` and writes nothing.
-- Blank webhook URL → **mock mode**: no network, legend shows no counts, spins still work.
+- **Stock is seeded in the frontend** (`STOCK_SEED` in `src/views/KioskView.vue`, 30 each) and
+  persisted to `localStorage` under `ai365.stock`, so an accidental page refresh keeps the running
+  counts. Bump `STOCK_VERSION` whenever you change the seed — it resets saved counts to the new numbers.
+- The seed counts are the legend bar's 100% mark.
+- The wheel picks the outcome client-side: Spin Again 10%, the rest split across in-stock goodies
+  weighted by remaining stock. When every goodie is sold out, a spin shows the "All prizes claimed" dialog.
+- On a win the frontend decrements its count, saves it, then POSTs `{ name, goodie_id, label }` so
+  n8n appends the winner to the Google Sheet guest list. The response is ignored — stock is local.
+- Blank webhook URL → **mock mode**: no network (no guest-list logging), spins still work.
 
 ## Local dev
 
@@ -62,39 +63,27 @@ on-screen keyboard appears when the name field is focused.
 
 ## n8n webhook contract
 
-One **POST** webhook, two behaviors (branched on whether the body has a `goodie_id`). Responds
-**HTTP 200** with JSON. Set the Webhook node's **Allowed Origins (CORS)** to your Netlify domain
-(or `*` while testing).
+One **POST** webhook, one behavior: append the winner to the guest list. Responds **HTTP 200**.
+Set the Webhook node's **Allowed Origins (CORS)** to your Netlify domain (or `*` while testing).
 
 | Call | Request | Response |
 |------|---------|----------|
-| read stock (on load) | POST `{ action: "stock" }` | `{ stock: { shirt, tote, charger } }` |
-| record win | POST `{ name, goodie_id, label }` | `{ result:"ok", goodie_id, remaining }` |
-| record win (sold out) | POST `{ name, goodie_id, label }` | `{ result:"sold_out", goodie_id, remaining:0 }` |
+| record win | POST `{ name, goodie_id, label }` | HTTP 200 (body ignored) |
 
 **Workflow logic** (`docs/n8n-workflow.json`):
 
-- No `goodie_id` → read the **Stock** tab and return `{ stock: {...} }`.
-- Has `goodie_id` → read stock; if in stock, append the guest to **Guest list** and decrement
-  the **Stock** tab, returning the new `remaining`; if 0, return `sold_out` and write nothing.
-- Called only on a real win — Spin Again sends nothing.
+- Append the guest to the **Guest list** tab (`[name, label]`).
+- Called only on a real win — Spin Again sends nothing. Stock is tracked in the frontend, not here.
 
-**Google Sheet** (one spreadsheet, two tabs):
+**Google Sheet** (one spreadsheet, one tab):
 
 - **Guest list** (`gid=0`) — columns `Name `, `Gift`
-- **Stock** — seed 30 each:
 
-  | goodie_id | label    | stock |
-  |-----------|----------|-------|
-  | shirt     | T-Shirt  | 30    |
-  | tote      | Tote Bag | 30    |
-  | charger   | Charger  | 30    |
+After importing the workflow, re-select the `Guest list` sheet on the Sheets node and confirm the
+Google Sheets credential, then activate it.
 
-After importing the workflow, re-select the `Stock` sheet on each Sheets node (Read Stock,
-Read Stock 2, Update Stock) and confirm the Google Sheets credential, then activate it.
-
-> Single-kiosk note: only one person interacts at a time, so no server-side lock is needed. Under
-> concurrent panels the read-modify-write on stock can race — add a mutex first.
+> Single-kiosk note: only one person interacts at a time. Stock is `localStorage`-per-browser, so
+> running it on multiple panels gives each its own independent counts.
 
 ## Brand art
 

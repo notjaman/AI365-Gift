@@ -166,10 +166,33 @@
 
 <script setup>
 import { ref, computed, onMounted, h } from 'vue'
-import { recordWin, fetchStock } from '../api.js'
+import { recordWin } from '../api.js'
 
-// Stock comes from n8n (Google Sheets is the source of truth); synced per win.
 const SPIN_MS = 4200
+
+// ── Stock lives in the frontend, persisted to localStorage so an accidental
+// refresh keeps the running counts. Bump STOCK_VERSION whenever you change the
+// seed below — it forces saved counts to reset to the new starting numbers. ──
+const STOCK_VERSION = 'v1'
+const STOCK_SEED = { shirt: 30, tote: 30, charger: 30 }
+const STOCK_KEY = 'ai365.stock'
+
+function loadStock() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STOCK_KEY))
+    if (saved && saved.version === STOCK_VERSION && saved.stock) return saved.stock
+  } catch {
+    // ignore corrupt/blocked storage; fall through to the seed
+  }
+  return { ...STOCK_SEED }
+}
+function saveStock(s) {
+  try {
+    localStorage.setItem(STOCK_KEY, JSON.stringify({ version: STOCK_VERSION, stock: s }))
+  } catch {
+    // storage full/blocked (e.g. private mode) — counts stay in memory only
+  }
+}
 
 // 3 real goodies (brand colors + icon) + the "spin again" filler.
 const GOODIES = [
@@ -247,7 +270,7 @@ const spinning = ref(false)
 const msg = ref('')
 const msgType = ref('')
 const stock = ref({})
-const capacity = ref({}) // first counts seen from n8n — the legend bar's 100% mark
+const capacity = ref({ ...STOCK_SEED }) // the seed counts — the legend bar's 100% mark
 const dialogOpen = ref(false)
 const dialogText = ref('')
 const dialogWin = ref(false)
@@ -272,11 +295,9 @@ const confetti = computed(() =>
   })),
 )
 
-onMounted(async () => {
-  // n8n's Stock sheet is the source of truth; capacity = first counts seen.
-  const live = await fetchStock()
-  stock.value = { ...live }
-  capacity.value = { ...live }
+onMounted(() => {
+  // Restore running counts from a prior session (survives refresh); else seed.
+  stock.value = loadStock()
 })
 
 function isSoldOut(id) {
@@ -343,12 +364,22 @@ function showInline(text, type = '') {
   spinning.value = false
 }
 
-// Decide the outcome client-side, weighted by the physical wheel (2 of each
-// goodie + 2 spin_again). Landing on a sold-out goodie falls back to spin_again.
+// Decide the outcome client-side. Spin Again is a flat 10%; the remaining 90% is
+// split across the in-stock goodies weighted by each one's remaining stock — a
+// goodie with more units left wins more often, so the pool drains evenly.
+const SPIN_AGAIN_CHANCE = 0.1
 function pickOutcome() {
-  const sid = SEGMENTS[Math.floor(Math.random() * SEGMENTS.length)]
-  if (sid === 'spin_again' || isSoldOut(sid)) return { type: 'spin_again' }
-  return { type: 'prize', id: sid }
+  const inStock = GOODIES.filter((g) => !isSoldOut(g.id))
+  if (inStock.length === 0) return { type: 'spin_again' }
+  if (Math.random() < SPIN_AGAIN_CHANCE) return { type: 'spin_again' }
+  // Weighted pick: P(goodie) ∝ its remaining stock count.
+  const total = inStock.reduce((sum, g) => sum + (stock.value[g.id] ?? 0), 0)
+  let r = Math.random() * total
+  for (const g of inStock) {
+    r -= stock.value[g.id] ?? 0
+    if (r < 0) return { type: 'prize', id: g.id }
+  }
+  return { type: 'prize', id: inStock[inStock.length - 1].id } // fp safety net
 }
 
 function spin() {
@@ -391,18 +422,13 @@ function spin() {
       showInline('So close — spin again!', 'again')
       return
     }
-    // Win: decrement locally now, then record + sync from the server's count.
+    // Win: decrement the local stock, persist it, then log the winner to n8n.
     const id = outcome.id
     stock.value = { ...stock.value, [id]: Math.max(0, (stock.value[id] ?? 0) - 1) }
+    saveStock(stock.value)
     celebrate.value = true
     openDialog('', true, GOODIE_BY_ID[id])
-    recordWin(n, id, GOODIE_BY_ID[id].label)
-      .then((r) => {
-        if (typeof r.remaining === 'number') {
-          stock.value = { ...stock.value, [id]: r.remaining }
-        }
-      })
-      .catch(() => {})
+    recordWin(n, id, GOODIE_BY_ID[id].label).catch(() => {})
   }, SPIN_MS + 120)
 }
 
