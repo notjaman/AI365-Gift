@@ -353,22 +353,6 @@ body {
   opacity: 0.55;
   cursor: not-allowed;
 }
-.restock-btn {
-  display: block;
-  margin: 10px auto 0;
-  padding: 5px 14px;
-  font: 600 12px var(--body);
-  color: #888;
-  background: transparent;
-  border: 1.5px solid #ccc;
-  border-radius: 6px;
-  cursor: pointer;
-  letter-spacing: 0.04em;
-}
-.restock-btn:hover {
-  color: #555;
-  border-color: #aaa;
-}
 .inline-msg {
   min-height: 26px;
   margin-top: 13px;
