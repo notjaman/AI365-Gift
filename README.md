@@ -1,8 +1,8 @@
 # AI 365 Lucky Draw Spin Wheel
 
 Saturday-event giveaway kiosk. On a single landscape screen the guest types their name, taps
-**SPIN** an 8-segment wheel, and a win dialog shows the prize (T-Shirt / Tote Bag / Charger, 30
-each) or invites a re-spin. Built to run on a **MAXHUB touch panel**.
+**SPIN** an 8-segment wheel, and a win dialog shows the prize (T-Shirt 20 / Tote Bag 40 / Charger 20)
+or invites a re-spin. Built to run on a **MAXHUB touch panel**.
 
 - **Frontend-only deploy.** A static Vue 3 app (Netlify) calls **one n8n webhook** directly. No backend, no database.
 - **Stock lives in the frontend** (seeded in code, persisted to `localStorage`). The n8n webhook only appends the winner to the Google Sheet guest list.
@@ -22,7 +22,7 @@ MAXHUB browser ─▶ Netlify (static Vue SPA) ─▶ n8n write webhook ─▶ G
 
 ## How it works
 
-- **Stock is seeded in the frontend** (`STOCK_SEED` in `src/views/KioskView.vue`, 30 each) and
+- **Stock is seeded in the frontend** (`STOCK_SEED` in `src/views/KioskView.vue`, T-Shirt 20 / Tote Bag 40 / Charger 20) and
   persisted to `localStorage` under `ai365.stock`, so an accidental page refresh keeps the running
   counts. Bump `STOCK_VERSION` whenever you change the seed — it resets saved counts to the new numbers.
 - The seed counts are the legend bar's 100% mark.

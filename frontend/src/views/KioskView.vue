@@ -173,8 +173,8 @@ const SPIN_MS = 4200
 // ── Stock lives in the frontend, persisted to localStorage so an accidental
 // refresh keeps the running counts. Bump STOCK_VERSION whenever you change the
 // seed below — it forces saved counts to reset to the new starting numbers. ──
-const STOCK_VERSION = 'v1'
-const STOCK_SEED = { shirt: 30, tote: 30, charger: 30 }
+const STOCK_VERSION = 'v2'
+const STOCK_SEED = { shirt: 20, tote: 40, charger: 20 }
 const STOCK_KEY = 'ai365.stock'
 
 function loadStock() {
