@@ -39,10 +39,12 @@
 
     <!-- error -->
     <div v-else class="card">
-      <p class="dialog-kicker err">Oops</p>
-      <h1>Something went wrong</h1>
+      <div class="err-ico">{{ isPhotoError ? '🖼️' : '⚠️' }}</div>
+      <p class="dialog-kicker err">{{ isPhotoError ? 'Photo problem' : 'Oops' }}</p>
+      <h1>{{ isPhotoError ? 'That photo won’t work' : 'Something went wrong' }}</h1>
       <p class="sub">{{ errorMsg }}</p>
-      <button class="btn-primary" @click="submit">Retry</button>
+      <button v-if="isPhotoError" class="btn-primary" @click="changePhoto">Choose another photo</button>
+      <button v-else class="btn-primary" @click="submit">Retry</button>
       <button class="link" @click="reset">Start over</button>
     </div>
   </main>
@@ -59,6 +61,7 @@ const phone = ref('')
 const photo = ref(null)
 const imageUrl = ref('')
 const errorMsg = ref('')
+const isPhotoError = ref(false)
 
 // Web Share with files isn't on desktop browsers — hide Share when unsupported.
 const canShare = typeof navigator !== 'undefined'
@@ -79,8 +82,18 @@ async function submit() {
     state.value = 'result'
   } catch (err) {
     errorMsg.value = err.message || 'Please try again.'
+    // ponytail: keyword heuristic to pick the photo-specific error screen;
+    // tighten to an error code if n8n ever sends one.
+    isPhotoError.value = /file type|unsupported|photo|image/i.test(errorMsg.value)
     state.value = 'error'
   }
+}
+
+// Bad photo → back to the form, keep their details, drop just the photo.
+function changePhoto() {
+  photo.value = null
+  isPhotoError.value = false
+  state.value = 'form'
 }
 
 async function share() {
@@ -116,7 +129,7 @@ async function download() {
 
 function reset() {
   name.value = ''; email.value = ''; phone.value = ''
-  photo.value = null; imageUrl.value = ''; errorMsg.value = ''
+  photo.value = null; imageUrl.value = ''; errorMsg.value = ''; isPhotoError.value = false
   state.value = 'form'
 }
 </script>
@@ -185,6 +198,7 @@ h1 { font: 700 30px/1.1 var(--head); margin: 0; color: var(--title); }
   color: var(--accent); margin: 0;
 }
 .dialog-kicker.err { color: #c4480f; }
+.err-ico { font-size: 46px; line-height: 1; margin-bottom: 2px; }
 
 /* ── fields ── */
 .field {

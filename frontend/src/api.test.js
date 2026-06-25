@@ -31,4 +31,11 @@ globalThis.fetch = async () => ({ ok: true, json: async () => ({ resultUrls: ['h
 const res2 = await generateGift({ name: 'A', email: 'a@b.c', phone: '1', photo: file }, 'https://n8n/webhook/gift')
 assert.strictEqual(res2.image_url, 'https://x/r.jpg', `resultUrls not read: ${res2.image_url}`)
 
+// { error } from n8n (e.g. unsupported file type) rejects with that message.
+globalThis.fetch = async () => ({ ok: true, json: async () => ({ error: 'Unsupported file type.' }) })
+await assert.rejects(
+  generateGift({ name: 'A', email: 'a@b.c', phone: '1', photo: file }, 'https://n8n/webhook/gift'),
+  /Unsupported file type/,
+)
+
 console.log('api.test.js OK')

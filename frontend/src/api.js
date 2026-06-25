@@ -46,6 +46,8 @@ export async function generateGift({ name, email, phone, photo }, url = GIFT_URL
   })
   if (!res.ok) throw new Error(`gift gen failed: ${res.status}`)
   const data = await res.json()
+  // n8n may reject the upload (e.g. unsupported type) with { error: "..." }
+  if (data.error) throw new Error(data.error)
   // accept n8n shapes: { image_url } | { image_base64 } | { resultUrls: [url] }
   return { image_url: data.image_url ?? data.image_base64 ?? data.resultUrls?.[0] }
 }
