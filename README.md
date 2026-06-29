@@ -85,6 +85,33 @@ Google Sheets credential, then activate it.
 > Single-kiosk note: only one person interacts at a time. Stock is `localStorage`-per-browser, so
 > running it on multiple panels gives each its own independent counts.
 
+## Gift page (Hug the Mascot)
+
+A second page at **`/gift.html`** (own Vite entry, separate from the kiosk). A guest
+reaches it by scanning a QR code, fills name / email / phone and adds a photo
+(`<input type="file" capture>` — camera or gallery), and submits.
+
+Flow: `GiftView.vue` POSTs `{ name, email, phone, photo_base64 }` (photo as raw
+base64) to **`VITE_N8N_GIFT_URL`**. n8n appends the lead to a sheet, generates the
+hug image, and responds **HTTP 200** with `{ image_url }`. The page shows the image
+with **Share** (Web Share API → OS share sheet → Instagram/Facebook story etc.) and
+**Download** (`<a download>`).
+
+- **Share** uses `navigator.share({ files })`; the button is hidden where the browser
+  can't share files (most desktops). Download always works.
+- Blank `VITE_N8N_GIFT_URL` → **mock mode**: returns `mascot.png` after ~1.5s so the
+  full flow is testable offline.
+- Web deep-links can't pre-fill an IG/FB story with an image; the OS share sheet is the
+  supported path.
+
+### Gift webhook contract
+
+| Call | Request | Response |
+|------|---------|----------|
+| generate gift | POST `{ name, email, phone, photo_base64 }` | HTTP 200 `{ image_url }` |
+
+Set the Webhook node's **Allowed Origins (CORS)** to the Netlify domain.
+
 ## Brand art
 
 The logo and mascot PNGs live at `frontend/public/ai365-logo.png` (brand title) and
