@@ -32,8 +32,7 @@
       <p class="dialog-kicker">All done</p>
       <h1>You did it!</h1>
       <img class="result" :src="imageUrl" alt="You hugging the mascot" />
-      <button class="btn-primary" v-if="canShare" @click="share">Share to story</button>
-      <button class="btn-soft" @click="download">Download</button>
+      <button class="btn-primary" @click="download">Download</button>
       <button class="link" @click="reset">Start over</button>
     </div>
 
@@ -63,11 +62,6 @@ const imageUrl = ref('')
 const errorMsg = ref('')
 const isPhotoError = ref(false)
 
-// Web Share with files isn't on desktop browsers — hide Share when unsupported.
-const canShare = typeof navigator !== 'undefined'
-  && !!navigator.canShare
-  && navigator.canShare({ files: [new File([''], 'x.png', { type: 'image/png' })] })
-
 function onPhoto(e) {
   photo.value = e.target.files[0] ?? null
 }
@@ -94,18 +88,6 @@ function changePhoto() {
   photo.value = null
   isPhotoError.value = false
   state.value = 'form'
-}
-
-async function share() {
-  try {
-    const blob = await (await fetch(imageUrl.value)).blob()
-    const file = new File([blob], 'ai365-hug.png', { type: blob.type || 'image/png' })
-    await navigator.share({ files: [file], title: 'AI 365', text: 'Me and the AI 365 mascot!' })
-  } catch (err) {
-    if (err.name === 'AbortError') return // user cancelled — ignore
-    errorMsg.value = 'Sharing not available — use Download instead.'
-    state.value = 'error'
-  }
 }
 
 // `download` attr is ignored for cross-origin URLs, so fetch a blob and
@@ -169,6 +151,7 @@ function reset() {
 .head { display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .mascot-badge {
   width: 104px; height: 104px; border-radius: 50%; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
   background: var(--card-bg);
   box-shadow: 0 0 0 6px #fff, 0 12px 26px rgba(120, 60, 20, 0.3);
 }
