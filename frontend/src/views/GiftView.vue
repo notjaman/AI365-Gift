@@ -12,11 +12,19 @@
       <input class="field" v-model.trim="name" type="text" placeholder="Name" required />
       <input class="field" v-model.trim="email" type="email" placeholder="Email" required />
       <input class="field" v-model.trim="phone" type="tel" placeholder="Phone number" required />
-      <label class="file" :class="{ filled: photo }">
-        <input type="file" accept="image/*" required @change="onPhoto" />
-        <span class="file-ico">📷</span>
-        <span class="file-text">{{ photo ? photo.name : 'Take or choose a photo' }}</span>
-      </label>
+      <div class="file-row">
+        <label class="file" :class="{ filled: photo }">
+          <input type="file" accept="image/*" capture="environment" @change="onPhoto" />
+          <span class="file-ico">📷</span>
+          <span class="file-text">Take photo</span>
+        </label>
+        <label class="file" :class="{ filled: photo }">
+          <input type="file" accept="image/*" @change="onPhoto" />
+          <span class="file-ico">🖼️</span>
+          <span class="file-text">Choose photo</span>
+        </label>
+      </div>
+      <p v-if="photo" class="file-name">✓ {{ photo.name }}</p>
       <button class="btn-primary" type="submit" :disabled="!photo">Generate my photo</button>
     </form>
 
@@ -293,6 +301,12 @@ h1 { font: 700 30px/1.1 var(--head); margin: 0; color: var(--title); }
 .field:focus { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
 
 /* ── file picker ── */
+.file-row { display: flex; gap: 10px; }
+.file-row .file { flex: 1; }
+.file-name {
+  margin: -6px 0 2px; font: 700 14px var(--body); color: var(--accent);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .file {
   display: flex; align-items: center; justify-content: center; gap: 10px;
   padding: 16px; border: 2px dashed #f1ddc7; border-radius: 16px;
