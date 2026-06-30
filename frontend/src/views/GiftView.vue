@@ -13,7 +13,7 @@
       <input class="field" v-model.trim="email" type="email" placeholder="Email" required />
       <input class="field" v-model.trim="phone" type="tel" placeholder="Phone number" required />
       <label class="file" :class="{ filled: photo }">
-        <input type="file" accept="image/*" capture="environment" required @change="onPhoto" />
+        <input type="file" accept="image/*" required @change="onPhoto" />
         <span class="file-ico">📷</span>
         <span class="file-text">{{ photo ? photo.name : 'Take or choose a photo' }}</span>
       </label>
