@@ -12,19 +12,22 @@
       <input class="field" v-model.trim="name" type="text" placeholder="Name" required />
       <input class="field" v-model.trim="email" type="email" placeholder="Email" required />
       <input class="field" v-model.trim="phone" type="tel" placeholder="Phone number" required />
-      <div class="file-row">
-        <label class="file" :class="{ filled: photo }">
-          <input type="file" accept="image/*" capture="environment" @change="onPhoto" />
-          <span class="file-ico">📷</span>
-          <span class="file-text">Take photo</span>
-        </label>
-        <label class="file" :class="{ filled: photo }">
-          <input type="file" accept="image/*" @change="onPhoto" />
-          <span class="file-ico">🖼️</span>
-          <span class="file-text">Choose photo</span>
-        </label>
+      <button type="button" class="file" :class="{ filled: photo }" @click="chooser = true">
+        <span class="file-ico">📷</span>
+        <span class="file-text">{{ photo ? photo.name : 'Add a photo' }}</span>
+      </button>
+      <!-- single entrypoint: tap opens camera-or-gallery, both feed onPhoto -->
+      <input ref="camInput" class="hidden-file" type="file" accept="image/*" capture="environment" @change="onPhoto" />
+      <input ref="galInput" class="hidden-file" type="file" accept="image/*" @change="onPhoto" />
+
+      <div v-if="chooser" class="sheet" @click.self="chooser = false">
+        <div class="sheet-card">
+          <p class="sheet-title">Add your photo</p>
+          <button type="button" class="btn-primary" @click="pick(camInput)">📷 Take a photo</button>
+          <button type="button" class="btn-soft" @click="pick(galInput)">🖼️ Choose from gallery</button>
+          <button type="button" class="link" @click="chooser = false">Cancel</button>
+        </div>
       </div>
-      <p v-if="photo" class="file-name">✓ {{ photo.name }}</p>
       <button class="btn-primary" type="submit" :disabled="!photo">Generate my photo</button>
     </form>
 
@@ -82,6 +85,14 @@ const photo = ref(null)
 const imageUrl = ref('')
 const errorMsg = ref('')
 const isPhotoError = ref(false)
+const chooser = ref(false)
+const camInput = ref(null)
+const galInput = ref(null)
+
+function pick(el) {
+  chooser.value = false
+  el?.click()
+}
 
 // n8n workflow nodes shown during the wait. ponytail: these are a timed
 // estimate, not live progress — n8n returns one response with no progress
@@ -301,18 +312,32 @@ h1 { font: 700 30px/1.1 var(--head); margin: 0; color: var(--title); }
 .field:focus { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
 
 /* ── file picker ── */
-.file-row { display: flex; gap: 10px; }
-.file-row .file { flex: 1; }
-.file-name {
-  margin: -6px 0 2px; font: 700 14px var(--body); color: var(--accent);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
+.hidden-file { display: none; }
 .file {
-  display: flex; align-items: center; justify-content: center; gap: 10px;
+  width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px;
   padding: 16px; border: 2px dashed #f1ddc7; border-radius: 16px;
-  cursor: pointer; color: var(--muted); font: 600 15px var(--body);
+  cursor: pointer; color: var(--muted); font: 600 15px var(--body); background: #fff;
   transition: border-color 0.18s, color 0.18s, background 0.18s;
 }
+
+/* ── photo chooser sheet ── */
+.sheet {
+  position: fixed; inset: 0; z-index: 20; display: flex; align-items: flex-end;
+  justify-content: center; background: rgba(0, 0, 0, 0.45);
+  animation: fade 0.18s ease;
+}
+.sheet-card {
+  width: 100%; max-width: 420px; display: flex; flex-direction: column; gap: 12px;
+  background: var(--card-bg); border-radius: 24px 24px 0 0; padding: 24px 22px 28px;
+  box-shadow: 0 -10px 30px rgba(120, 60, 20, 0.22);
+  animation: rise 0.24s cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+.sheet-title {
+  margin: 0 0 2px; text-align: center;
+  font: 700 18px var(--head); color: var(--title);
+}
+@keyframes fade { from { opacity: 0; } }
+@keyframes rise { from { transform: translateY(100%); } }
 .file:hover { border-color: var(--accent); }
 .file.filled { border-style: solid; border-color: var(--accent); color: var(--title); background: #fff7f0; }
 .file input { display: none; }
