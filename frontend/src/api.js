@@ -33,6 +33,17 @@ export async function fileToBase64(file) {
   return btoa(binary)
 }
 
+// The gift workflow only responds when it finishes (~53s), so a fast rejection
+// means the webhook is unreachable (404/network) while a request still open after
+// a short grace means it was accepted. Returns 'done' | 'failed' | 'accepted'
+// without consuming the promise (await it yourself afterwards for the result).
+export function probeAccepted(promise, graceMs = 1500) {
+  return Promise.race([
+    promise.then(() => 'done', () => 'failed'),
+    new Promise((r) => setTimeout(() => r('accepted'), graceMs)),
+  ])
+}
+
 export async function generateGift({ name, email, phone, photo }, url = GIFT_URL) {
   const photo_base64 = await fileToBase64(photo)
   if (!url) {

@@ -1,6 +1,12 @@
 // Run: node frontend/src/api.test.js
 import assert from 'node:assert'
-import { recordWin, fileToBase64, generateGift } from './api.js'
+import { recordWin, fileToBase64, generateGift, probeAccepted } from './api.js'
+
+// probeAccepted: fast reject => 'failed', fast resolve => 'done', slow => 'accepted'.
+const delay = (ms, v) => new Promise((r) => setTimeout(() => r(v), ms))
+assert.strictEqual(await probeAccepted(Promise.reject(new Error('404')), 50), 'failed')
+assert.strictEqual(await probeAccepted(Promise.resolve('x'), 50), 'done')
+assert.strictEqual(await probeAccepted(delay(80, 'x'), 20), 'accepted')
 
 // fileToBase64 returns raw base64 (no data-URL prefix) for known bytes.
 // "Hi" => SGk=
